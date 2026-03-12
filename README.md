@@ -12,7 +12,7 @@ Supported models:
 
 The student model learns from the teacher using **multiple distillation objectives**, improving performance while keeping the model lightweight.
 
-[^1]: Environment Requirements
+## Environment Requirements
 
 The experiments are conducted with the following environment.
 
