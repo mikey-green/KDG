@@ -12,7 +12,7 @@ def parse_args():
     )
 
     # ===== train ===== # 
-    parser.add_argument("--gnn", nargs="?", default="ngcf",
+    parser.add_argument("--gnn", nargs="?", default="lightgcn",
                         help="Choose a recommender:[lightgcn, ngcf]")
     parser.add_argument('--epoch', type=int, default=1000, help='number of epochs')
     parser.add_argument('--batch_size', type=int, default=1024, help='batch size')
