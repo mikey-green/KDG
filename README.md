@@ -6,10 +6,10 @@ The framework trains a Teacher GNN model first and then distills knowledge to a 
 
 Supported models:
 
-'''
+```
 LightGCN
 
 NGCF
-'''
+```
 
 The student model learns from the teacher using multiple distillation objectives, improving performance while keeping the model lightweight.
