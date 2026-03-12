@@ -1,12 +1,13 @@
-# KDG
-Knowledge Distillation, GNN, Recommender System
+#Graph Neural Network Recommendation with Knowledge Distillation
 
-## Environment Requirement
+This project implements a Graph Neural Network based recommendation system with Knowledge Distillation (KD).
 
-The code has been tested running under Python 3.7.6. The required packages are as follows:
+The framework trains a Teacher GNN model first and then distills knowledge to a smaller Student model.
 
-- pytorch == 1.7.0
-- numpy == 1.20.2
-- scipy == 1.6.3
-- sklearn == 0.24.1
-- prettytable == 2.1.0
+Supported models:
+
+-LightGCN
+
+-NGCF
+
+The student model learns from the teacher using multiple distillation objectives, improving performance while keeping the model lightweight.
