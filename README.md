@@ -49,24 +49,25 @@ pip install torch==2.0.0 numpy scikit-learn tqdm prettytable
 ```
 project/
 │
-├── data/                     # dataset directory
+├── Dataset/                     # dataset directory
 │
-├── modules/
+├── Modules/
 │   ├── LightGCN.py
 │   ├── NGCF.py
 │   └── Student.py            # Student LightGCN model
 │
-├── utils/
+├── Utils/
 │   ├── parser.py
 │   ├── data_loader.py
 │   ├── evaluate.py
+|   ├── metrics.py
 │   └── helper.py
 │
-├── teacher.py                # Teacher model training
+├── main_teacher.py                # Teacher model training
 ├── main.py                   # Student KD training
 │
 ├── Log/                      # training logs
-├── checkpoints/              # saved model weights
+├── Checkpoints/              # saved model weights
 │
 └── README.md
 ```
@@ -90,6 +91,7 @@ data/
 ├── movielens/
 │   ├── train.txt
 │   ├── test.txt
+|   └── valid.txt
 │
 ├── yelp2018/
 │
@@ -135,7 +137,7 @@ The best model will be saved automatically.
 Saved model path:
 
 ```
-checkpoints/
+Checkpoints/
 teacher_lightgcn_movielens_dim64_hop3.pth
 ```
 
@@ -143,7 +145,7 @@ Training logs:
 
 ```
 Log/
-teacher_movielens_dim64.txt
+teacher_lightgcn_movielens_dim64.txt
 ```
 
 ---
@@ -169,7 +171,7 @@ The teacher model will be automatically loaded and frozen.
 Example checkpoint:
 
 ```
-checkpoints/
+Checkpoints/
 teacher_lightgcn_movielens_dim64_hop3.pth
 ```
 
@@ -271,7 +273,7 @@ Hit Ratio@K
 Evaluation is implemented in:
 
 ```
-utils/evaluate.py
+Utils/evaluate.py
 ```
 
 ---
@@ -285,8 +287,8 @@ Example:
 ```
 Log/
 
-teacher_movielens_dim64.txt
-student2_movielens_dim32.txt
+teacher_lightgcn_movielens_dim64.txt
+student_lightgcn_movielens_dim32.txt
 ```
 
 Each log contains:
@@ -309,14 +311,14 @@ hit_ratio
 Saved models are stored in:
 
 ```
-checkpoints/
+Checkpoints/
 ```
 
 Example:
 
 ```
 teacher_lightgcn_movielens_dim64_hop3.pth
-student2_lightgcn_movielens_dim32_hop2_kd.pth
+student_lightgcn_movielens_dim32_hop2_kd.pth
 ```
 
 ---
