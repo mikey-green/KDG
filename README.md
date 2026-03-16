@@ -1,7 +1,7 @@
 
 ---
 
-# Graph Neural Network Recommendation with Knowledge Distillation
+# **Graph Neural Network Recommendation with Knowledge Distillation**
 
 This project implements a **Graph Neural Network based recommendation system** with **Knowledge Distillation (KD)**.
 
@@ -16,7 +16,7 @@ The student model learns from the teacher using **multiple distillation objectiv
 
 ---
 
-# 1. Environment Requirements
+## 1. Environment Requirements
 
 The experiments are conducted with the following environment.
 
@@ -44,7 +44,7 @@ pip install torch==2.0.0 numpy scikit-learn tqdm prettytable
 
 ---
 
-# 2. Project Structure
+## 2. Project Structure
 
 ```
 project/
@@ -74,7 +74,7 @@ project/
 
 ---
 
-# 3. Dataset
+## 3. Dataset
 
 The framework supports common recommendation datasets:
 
@@ -104,7 +104,7 @@ Each dataset contains user-item interaction files.
 
 ---
 
-# 4. Teacher Model Training
+## 4. Teacher Model Training
 
 The Teacher model can be either **LightGCN** or **NGCF**.
 
@@ -150,7 +150,7 @@ teacher_lightgcn_movielens_dim64.txt
 
 ---
 
-# 5. Student Model Training (Knowledge Distillation)
+## 5. Student Model Training (Knowledge Distillation)
 
 After training the Teacher model, the Student model is trained using **knowledge distillation**.
 
@@ -177,7 +177,7 @@ teacher_lightgcn_movielens_dim64_hop3.pth
 
 ---
 
-# 6. Knowledge Distillation Strategy
+## 6. Knowledge Distillation Strategy
 
 The student model learns from the teacher using **three types of distillation losses**.
 
@@ -234,7 +234,7 @@ MSE(sim_student, sim_teacher)
 
 ---
 
-# 7. Total Training Loss
+## 7. Total Training Loss
 
 The final training objective is:
 
@@ -259,7 +259,7 @@ KD weight is dynamically adjusted during training.
 
 ---
 
-# 8. Evaluation Metrics
+## 8. Evaluation Metrics
 
 Model performance is evaluated using:
 
@@ -278,7 +278,7 @@ Utils/evaluate.py
 
 ---
 
-# 9. Training Logs
+## 9. Training Logs
 
 Logs are automatically saved.
 
@@ -306,7 +306,7 @@ hit_ratio
 
 ---
 
-# 10. Model Checkpoints
+## 10. Model Checkpoints
 
 Saved models are stored in:
 
@@ -323,7 +323,7 @@ student_lightgcn_movielens_dim32_hop2_kd.pth
 
 ---
 
-# 11. Reproducibility
+## 11. Reproducibility
 
 Random seeds are fixed for reproducibility.
 
@@ -339,7 +339,7 @@ The following libraries are seeded:
 
 ---
 
-# 12. Citation
+## 12. Citation
 
 If you use this code in your research, please cite:
 
@@ -353,7 +353,7 @@ If you use this code in your research, please cite:
 
 ---
 
-# 13. Notes
+## 13. Notes
 
 Workflow:
 
