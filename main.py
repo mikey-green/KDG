@@ -11,23 +11,28 @@ import logging
 from prettytable import PrettyTable
 import math
 
-from utils.parser import parse_args
-from utils.data_loader import load_data
-from utils.evaluate import test
-from utils.helper import early_stopping
+from Utils.parser import parse_args
+from Utils.data_loader import load_data
+from Utils.evaluate import test
+from Utils.helper import early_stopping
 
 ######################################################################################################
 # student模型
-from modules.Student import StudentLightGCN
+from Modules.Student import StudentLightGCN
 import torch.nn.functional as F
 
-
+'''
 def kl_div_with_logits(s_logits, t_logits, temperature=4.0):
     """学生和教师的 logits 之间的 KL 散度"""
     s_prob = F.log_softmax(s_logits / temperature, dim=-1)
     t_prob = F.softmax(t_logits / temperature, dim=-1)
     return F.kl_div(s_prob, t_prob, reduction='batchmean') * (temperature ** 2)
+'''
+def kl_div_with_logits(s_logits, t_logits, temperature=2.0):
+    s_log_prob = F.log_softmax(s_logits / temperature, dim=1)
+    t_prob = F.softmax(t_logits / temperature, dim=1)
 
+    return F.kl_div(s_log_prob, t_prob, reduction='batchmean') * (temperature ** 2)
 
 def wasserstein_distance(s_logits, t_logits):
     s_prob = F.softmax(s_logits, dim=-1)
@@ -106,13 +111,11 @@ if __name__ == '__main__':
 
     ##############################################################################
     def get_save_path(args, model_type="student"):
-        save_dir = "checkpoints"
+        save_dir = "Checkpoints"
         os.makedirs(save_dir, exist_ok=True)
 
         filename = f"{model_type}_{args.gnn}_{args.dataset}_dim{args.dim}_hop{args.context_hops}_kd.pth"
         return os.path.join(save_dir, filename)
-
-
     ##############################################################################
 
     """fix the random seed"""
@@ -161,7 +164,7 @@ if __name__ == '__main__':
 
         teacher = LightGCN(n_params, teacher_args, norm_mat).to(device)
     else:
-        from modules.NGCF import NGCF
+        from Modules.NGCF import NGCF
 
         teacher = NGCF(n_params, teacher_args, norm_mat).to(device)
 
@@ -292,7 +295,8 @@ if __name__ == '__main__':
             # 拼接正负样本分数构成 logits（形状 [batch, 2]）
             s_logits = torch.stack([s_pos_scores, s_neg_scores], dim=1)
             t_logits = torch.stack([t_pos_scores, t_neg_scores], dim=1)
-            score_kd = wasserstein_distance(s_logits, t_logits)
+            #score_kd = wasserstein_distance(s_logits, t_logits)
+            score_kd = kl_div_with_logits(s_logits, t_logits, temperature=2.0)
 
             # =========================
             # Representation KD（中间层蒸馏 + Projection）
@@ -336,7 +340,12 @@ if __name__ == '__main__':
             sim_t_ui = F.cosine_similarity(t_users_batch, t_items_batch, dim=1)
 
             struct_kd = F.mse_loss(sim_s_ui, sim_t_ui)
-
+            '''
+            struct_kd = F.mse_loss(
+                F.normalize(sim_s_ui, dim=0),
+                F.normalize(sim_t_ui, dim=0)
+            )
+            '''
             kd_weight = 0.3 * (1 / (1 + math.exp(-(epoch - 0.3 * args.epoch) / 10)))
             # =========================
             # 总Loss
@@ -345,9 +354,9 @@ if __name__ == '__main__':
             # 0.3 0.3 0.1->0.4 0.4 0.03->0.5 0.4 0.002
             batch_loss = time_weight * bpr_loss \
                          + time_weight * kd_weight * (
-                                 0.5 * score_kd +
-                                 0.4 * rep_kd +
-                                 0.1 * struct_kd
+                                 0.4 * score_kd +
+                                 0.3 * rep_kd +
+                                 0.3 * struct_kd
                          )
 
             # ===== 统计 KD =====
@@ -421,7 +430,7 @@ if __name__ == '__main__':
             # early stopping when cur_best_pre_0 is decreasing for 10 successive steps.
             cur_best_pre_0, stopping_step, should_stop = early_stopping(valid_ret['recall'][0], cur_best_pre_0,
                                                                         stopping_step, expected_order='acc',
-                                                                        flag_step=10)
+                                                                        flag_step=6)
             if should_stop:
                 break
 
