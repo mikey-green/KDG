@@ -8,13 +8,13 @@ def parse_args():
     parser.add_argument("--dataset", nargs="?", default="amazon",
                         help="Choose a dataset:[amazon,yelp2018,ali,movielens]")
     parser.add_argument(
-        "--data_path", nargs="?", default="data/", help="Input data path."
+        "--data_path", nargs="?", default="Dataset/", help="Input data path."
     )
 
     # ===== train ===== # 
     parser.add_argument("--gnn", nargs="?", default="lightgcn",
                         help="Choose a recommender:[lightgcn, ngcf]")
-    parser.add_argument('--epoch', type=int, default=1000, help='number of epochs')
+    parser.add_argument('--epoch', type=int, default=500, help='number of epochs')
     parser.add_argument('--batch_size', type=int, default=1024, help='batch size')
     parser.add_argument('--test_batch_size', type=int, default=2048, help='batch size in evaluation phase')
     parser.add_argument('--dim', type=int, default=64, help='embedding size')
