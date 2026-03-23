@@ -72,8 +72,8 @@ class StudentLightGCN(nn.Module):
 
         # 超参数（使用Student的参数，比如dim=32）
         self.decay = args_config.l2
-        self.emb_size = args_config.dim  # Student的嵌入维度
-        self.context_hops = args_config.context_hops  # Student的传播层数
+        self.emb_size = args_config.dim  # Student的嵌入维度（比如32，Teacher是64）
+        self.context_hops = args_config.context_hops  # Student的传播层数（比如2，Teacher是3）
         self.mess_dropout = args_config.mess_dropout
         self.mess_dropout_rate = args_config.mess_dropout_rate
         self.edge_dropout = args_config.edge_dropout
@@ -102,7 +102,12 @@ class StudentLightGCN(nn.Module):
 
 ########################################################################             
         # ===== Projection layer for KD (32 -> 64) =====
-        self.kd_proj = nn.Linear(self.emb_size, 64)
+        #self.kd_proj = nn.Linear(self.emb_size, 64)
+        self.kd_proj = nn.Sequential(
+            nn.Linear(self.emb_size, 128),
+            nn.ReLU(),
+            nn.Linear(128, 64)
+        )
 ########################################################################
         
     def _init_weight(self):
@@ -189,6 +194,19 @@ class StudentLightGCN(nn.Module):
         else:  # final
             return embeddings[:, -1, :]
 
+    '''
+    def generate(self, split=True):
+        """生成最终嵌入（和Teacher逻辑一致）"""
+        user_gcn_emb, item_gcn_emb = self.gcn(self.user_embed,
+                                              self.item_embed,
+                                              edge_dropout=False,
+                                              mess_dropout=False)
+        user_gcn_emb, item_gcn_emb = self.pooling(user_gcn_emb), self.pooling(item_gcn_emb)
+        if split:
+            return user_gcn_emb, item_gcn_emb
+        else:
+            return torch.cat([user_gcn_emb, item_gcn_emb], dim=0)
+    '''
 ########################################################################   
 #新增代码
     def generate(self, split=True, return_layers=False):
@@ -217,10 +235,18 @@ class StudentLightGCN(nn.Module):
 ######################################################################## 
 
     def rating(self, u_g_embeddings=None, i_g_embeddings=None):
+        """
+        核心修复：添加和Teacher完全一致的rating方法
+        计算用户-物品评分矩阵（矩阵乘法），适配evaluate.py的调用
+        """
         return torch.matmul(u_g_embeddings, i_g_embeddings.t())
 
     def create_bpr_loss(self, user_gcn_emb, pos_gcn_embs, neg_gcn_embs):
         """计算BPR损失（和Teacher完全一致）"""
+        # user_gcn_emb: [batch_size, n_hops+1, channel]
+        # pos_gcn_embs: [batch_size, n_hops+1, channel]
+        # neg_gcn_embs: [batch_size, K, n_hops+1, channel]
+
         batch_size = user_gcn_emb.shape[0]
 
         u_e = self.pooling(user_gcn_emb)
