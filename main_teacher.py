@@ -10,10 +10,10 @@ from copy import deepcopy
 import logging
 from prettytable import PrettyTable
 
-from utils.parser import parse_args
-from utils.data_loader import load_data
-from utils.evaluate import test
-from utils.helper import early_stopping
+from Utils.parser import parse_args
+from Utils.data_loader import load_data
+from Utils.evaluate import test
+from Utils.helper import early_stopping
 
 n_users = 0
 n_items = 0
@@ -54,8 +54,8 @@ if __name__ == '__main__':
         log_dir = "Log"
         os.makedirs(log_dir, exist_ok=True)
 
-        # 文件名：student_数据集名称_dim**.txt
-        log_file = f"teacher_{args.dataset}_dim{args.dim}.txt"
+        # 文件名：teacher_数据集名称_dim**.txt
+        log_file = f"teacher_{args.gnn}_{args.dataset}_dim{args.dim}.txt"
         log_path = os.path.join(log_dir, log_file)
 
         logger = logging.getLogger()
@@ -85,7 +85,7 @@ if __name__ == '__main__':
         return logger
     #新增代码
     def get_save_path(args, model_type="teacher"):
-        save_dir = "checkpoints"
+        save_dir = "Checkpoints"
         os.makedirs(save_dir, exist_ok=True)
 
         filename = f"{model_type}_{args.gnn}_{args.dataset}_dim{args.dim}_hop{args.context_hops}.pth"
@@ -108,7 +108,6 @@ if __name__ == '__main__':
     args = parse_args()
     logger = init_logger(args)
     os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpu_id)
-    #device = torch.device("cuda:0") if args.cuda else torch.device("cpu")
     ##################################################
     import torch
 
@@ -136,8 +135,8 @@ if __name__ == '__main__':
 
     """define model"""
     # 选择 LightGCN/NGCF 模型,初始化时传入数据维度、超参数、归一化矩阵
-    from modules.LightGCN import LightGCN
-    from modules.NGCF import NGCF
+    from Modules.LightGCN import LightGCN
+    from Modules.NGCF import NGCF
     if args.gnn == 'lightgcn':
         model = LightGCN(n_params, args, norm_mat).to(device)
     else:
@@ -207,7 +206,6 @@ if __name__ == '__main__':
                 train_res.add_row(
                     [epoch, train_e_t - train_s_t, test_e_t - test_s_t, loss.item(), valid_ret['recall'], valid_ret['ndcg'],
                      valid_ret['precision'], valid_ret['hit_ratio']])
-            #print(train_res)
             logger.info("\n" + str(train_res))
 
             # *********************************************************
@@ -219,18 +217,12 @@ if __name__ == '__main__':
                 break
 
             """save weight"""
-            #if valid_ret['recall'][0] == cur_best_pre_0 and args.save:
-            #   torch.save(model.state_dict(), args.out_dir + 'model_' + '.ckpt')
                 
             if valid_ret['recall'][0] == cur_best_pre_0:
                 save_path = get_save_path(args, model_type="teacher")
                 torch.save(model.state_dict(), save_path)
-                #print(f"Best Teacher saved to {save_path}")
                 logger.info(f"Best Teacher saved to {save_path}")
 
         else:
-            # logging.info('training loss at epoch %d: %f' % (epoch, loss.item()))
-            #print('using time %.4fs, training loss at epoch %d: %.4f' % (train_e_t - train_s_t, epoch, loss.item()))
             logger.info('using time %.4fs, training loss at epoch %d: %.4f' % (train_e_t - train_s_t, epoch, loss.item()))
-    #print('early stopping at %d, recall@20:%.4f' % (epoch, cur_best_pre_0))
     logger.info('early stopping at %d, recall@20:%.4f' % (epoch, cur_best_pre_0))
