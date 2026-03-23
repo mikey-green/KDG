@@ -21,13 +21,13 @@ The student model learns from the teacher using **multiple distillation objectiv
 The experiments are conducted with the following environment.
 
 ```
-Python 3.8
-CUDA 11.8
-PyTorch 2.0.0
-NumPy
-scikit-learn
-tqdm
-prettytable
+modules==1.0.0
+numpy==1.24.4
+prettytable==3.17.0
+scikit_learn==1.3.2
+scipy==1.17.1
+torch==2.4.1
+tqdm==4.67.3
 ```
 
 Operating System
