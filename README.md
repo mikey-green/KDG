@@ -15,26 +15,34 @@ Supported models:
 The student model learns from the teacher using **multiple distillation objectives**, improving performance while keeping the model lightweight.
 
 ---
+## Environment
 
-## Environment Requirements
+The experiments are conducted under the following Python environment.
+To reproduce the environment, please install the dependencies using the provided `requirements.txt`.
 
-The experiments are conducted with the following environment.
+### Installation
 
+```bash
+# create virtual environment (optional but recommended)
+conda create -n NAME python=3.8
+conda activate NAME
+
+# install dependencies
+pip install -r requirements.txt
 ```
-modules==1.0.0
-numpy==1.24.4
-prettytable==3.17.0
-scikit_learn==1.3.2
-scipy==1.17.1
-torch==2.4.1
-tqdm==4.67.3
-```
 
-Operating System
+### Main Dependencies
 
-```
-Ubuntu 20.04
-```
+The key libraries used in our experiments include:
+
+* PyTorch
+* NumPy
+* SciPy
+* scikit-learn
+* tqdm
+* PrettyTable
+
+All exact package versions are listed in `requirements.txt`.
 
 ---
 
