@@ -4,6 +4,7 @@ import random
 import torch
 import numpy as np
 
+import torch.nn.functional as F
 from time import time
 from tqdm import tqdm
 from copy import deepcopy
@@ -39,7 +40,26 @@ def wasserstein_distance(s_logits, t_logits):
     t_prob = F.softmax(t_logits, dim=-1)
     return torch.mean(torch.abs(s_prob - t_prob))
 
+def adaptive_weights(score_kd, rep_kd, struct_kd, adv_loss, eps=1e-8):
+    """计算每个 loss 的动态权重，基于 loss 大小"""
+    losses = torch.tensor([score_kd.item(), rep_kd.item(), struct_kd.item(), adv_loss.item()])
+    inv_losses = 1.0 / (losses + eps)
+    weights = inv_losses / inv_losses.sum()
+    return weights.tolist()  # 返回 list [w_score, w_rep, w_struct, w_adv]
+#################################################################################
+#对抗学习：判别器
+class Discriminator(torch.nn.Module):
+    def __init__(self, dim):
+        super().__init__()
+        self.net = torch.nn.Sequential(
+            torch.nn.Linear(dim, dim),
+            torch.nn.ReLU(),
+            torch.nn.Linear(dim, 1),
+            torch.nn.Sigmoid()
+        )
 
+    def forward(self, x):
+        return self.net(x)
 ######################################################################################################
 
 n_users = 0
@@ -191,6 +211,12 @@ if __name__ == '__main__':
 
     optimizer = torch.optim.Adam(student.parameters(), lr=args.lr)
 
+    # ===================== 对抗学习初始化 =====================
+    disc = Discriminator(64).to(device)  # Teacher维度=64
+    disc_optimizer = torch.optim.Adam(disc.parameters(), lr=1e-4)
+    bce_loss = torch.nn.BCELoss()
+    # ==========================================================
+
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=5, verbose=True)
     ####################################################################################################
 
@@ -304,22 +330,47 @@ if __name__ == '__main__':
             rep_kd = 0
             min_layers = min(s_user_layers.shape[1], t_user_layers.shape[1])
 
+            # 只蒸馏最后一层
             for l in range(min_layers):
                 # Student 映射到 Teacher 维度
-                s_user_proj = student.kd_proj(s_user_layers[:, l, :])
-                s_item_proj = student.kd_proj(s_item_layers[:, l, :])
+                s_user_proj = student.kd_proj(s_user_layers[:, -1, :])
+                s_item_proj = student.kd_proj(s_item_layers[:, -1, :])
 
                 rep_kd += F.mse_loss(
                     s_user_proj,
-                    t_user_layers[:, l, :]
+                    t_user_layers[:, -1, :]
                 )
 
                 rep_kd += F.mse_loss(
                     s_item_proj,
+                    t_item_layers[:, -1, :]
+                )
+
+            rep_kd = rep_kd / 2
+
+            '''
+            # 多层蒸馏
+            rep_kd = 0
+            min_layers = min(s_user_layers.shape[1], t_user_layers.shape[1])
+
+            for l in range(min_layers):
+                weight = (l + 1) / min_layers   # 深层权重大
+
+                s_user_proj = student.kd_proj(s_user_layers[:, l, :])
+                s_item_proj = student.kd_proj(s_item_layers[:, l, :])
+
+                rep_kd += weight * F.mse_loss(
+                    s_user_proj,
+                    t_user_layers[:, l, :]
+                )
+
+                rep_kd += weight * F.mse_loss(
+                    s_item_proj,
                     t_item_layers[:, l, :]
                 )
 
-            rep_kd = rep_kd / min_layers
+            rep_kd = rep_kd / (2 * min_layers)
+            '''
 
             # =========================
             # Structure KD（Batch级结构蒸馏，防OOM）
@@ -340,6 +391,36 @@ if __name__ == '__main__':
             sim_t_ui = F.cosine_similarity(t_users_batch, t_items_batch, dim=1)
 
             struct_kd = F.mse_loss(sim_s_ui, sim_t_ui)
+
+            # ===================== 对抗学习 =====================
+
+            # Student embedding（投影到Teacher维度）
+            s_embed = student.kd_proj(s_users_emb[users])  # [batch, 64]
+            t_embed = t_users_emb[users]  # [batch, 64]
+
+            # 标签
+            real_label = torch.ones((t_embed.size(0), 1)).to(device)
+            fake_label = torch.zeros((s_embed.size(0), 1)).to(device)
+
+            # ===== (1) 训练判别器 =====
+            disc.train()
+
+            real_out = disc(t_embed.detach())
+            fake_out = disc(s_embed.detach())
+
+            loss_d = bce_loss(real_out, real_label) + bce_loss(fake_out, fake_label)
+
+            disc_optimizer.zero_grad()
+            loss_d.backward()
+            disc_optimizer.step()
+
+            # ===== (2) 训练Student（骗判别器）=====
+            disc.eval()
+
+            fake_out = disc(s_embed)
+            adv_loss = bce_loss(fake_out, real_label)
+
+            # ==================================================
             '''
             struct_kd = F.mse_loss(
                 F.normalize(sim_s_ui, dim=0),
@@ -347,18 +428,33 @@ if __name__ == '__main__':
             )
             '''
             kd_weight = 0.3 * (1 / (1 + math.exp(-(epoch - 0.3 * args.epoch) / 10)))
-            # =========================
-            # 总Loss
-            # =========================
 
+            # ===================== 自适应权重 =====================
+            w_score, w_rep, w_struct, w_adv = adaptive_weights(score_kd, rep_kd, struct_kd, adv_loss)
+
+            #打印便于调试
+            #logger.info("Adaptive Weights: score=%.4f rep=%.4f struct=%.4f adv=%.4f"
+            #            % (w_score, w_rep, w_struct, w_adv))
+
+            # ===================== 总 Loss =====================
+            batch_loss = time_weight * bpr_loss \
+                         + time_weight * kd_weight * (
+                                 w_score * score_kd +
+                                 w_rep * rep_kd +
+                                 w_struct * struct_kd
+                         ) \
+                         + w_adv * adv_loss
+
+            '''
             # 0.3 0.3 0.1->0.4 0.4 0.03->0.5 0.4 0.002
             batch_loss = time_weight * bpr_loss \
                          + time_weight * kd_weight * (
                                  0.4 * score_kd +
                                  0.3 * rep_kd +
-                                 0.3 * struct_kd
+                                 0.3 * struct_kd +
+                                 0.05 * adv_loss
                          )
-
+            '''
             # ===== 统计 KD =====
             score_sum += score_kd.item()
             rep_sum += rep_kd.item()
@@ -383,10 +479,11 @@ if __name__ == '__main__':
 
         if batch_count > 0:
             logger.info(
-                "KD avg: score=%.6f rep=%.6f struct=%.6f"
+                "KD avg: score=%.6f rep=%.6f struct=%.6f ADV loss: %.6f"
                 % (score_sum / batch_count,
                    rep_sum / batch_count,
-                   struct_sum / batch_count)
+                   struct_sum / batch_count,
+                   adv_loss.item())
             )
 
         if epoch % 5 == 0:
