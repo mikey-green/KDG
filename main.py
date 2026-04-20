@@ -99,7 +99,7 @@ if __name__ == '__main__':
         os.makedirs(log_dir, exist_ok=True)
 
         # 文件名：student_数据集名称_dim**.txt
-        log_file = f"student_{args.gnn}_{args.dataset}_dim{args.dim}.txt"
+        log_file = f"student2_{args.gnn}_{args.dataset}_dim{args.dim}.txt"
         log_path = os.path.join(log_dir, log_file)
 
         logger = logging.getLogger()
@@ -130,7 +130,7 @@ if __name__ == '__main__':
 
 
     ##############################################################################
-    def get_save_path(args, model_type="student"):
+    def get_save_path(args, model_type="student2"):
         save_dir = "Checkpoints"
         os.makedirs(save_dir, exist_ok=True)
 
@@ -166,6 +166,20 @@ if __name__ == '__main__':
     train_cf, user_dict, n_params, norm_mat = load_data(args)
     train_cf_size = len(train_cf)
     train_cf = torch.LongTensor(np.array([[cf[0], cf[1]] for cf in train_cf], np.int32))
+
+    # ===================== 伪交互时间（用户内顺序） =====================
+    user_time = torch.zeros(len(train_cf))
+
+    user_counter = {}
+    for i, (u, _) in enumerate(train_cf):
+        u = int(u)
+        if u not in user_counter:
+            user_counter[u] = 0
+        user_counter[u] += 1
+        user_time[i] = user_counter[u]
+
+    # 归一化到 0~1
+    user_time = user_time / user_time.max()
 
     n_users = n_params['n_users']
     n_items = n_params['n_items']
@@ -209,7 +223,17 @@ if __name__ == '__main__':
     # ========= Student =========
     student = StudentLightGCN(n_params, args, norm_mat).to(device)
 
-    optimizer = torch.optim.Adam(student.parameters(), lr=args.lr)
+    # ===================== 异构蒸馏 Adapter =====================
+    hetero_adapter = torch.nn.Sequential(
+        torch.nn.Linear(args.dim, 64),
+        torch.nn.ReLU(),
+        torch.nn.Linear(64, 64)
+    ).to(device)
+
+    optimizer = torch.optim.Adam(
+        list(student.parameters()) + list(hetero_adapter.parameters()),
+        lr=args.lr
+    )
 
     # ===================== 对抗学习初始化 =====================
     disc = Discriminator(64).to(device)  # Teacher维度=64
@@ -232,8 +256,12 @@ if __name__ == '__main__':
         # =========================
         progress = epoch / args.epoch
 
-        alpha = 2.0
-        time_weight = 1.0 + 0.5 * progress
+        # 训练时间权重
+        #epoch_weight = 0.5 + 0.5 * progress
+        epoch_weight = 0.3 + 0.7 * progress
+
+        #alpha = 2.0
+        #time_weight = 1.0 + 0.5 * progress
 
         # ===== 统计 KD 各部分 loss =====
         score_sum = 0
@@ -259,6 +287,14 @@ if __name__ == '__main__':
                                   n_negs)
             ####################################################################################################
             # 新增代码
+
+            # 交互时间权重
+            batch_time = user_time[s:s + args.batch_size]
+            interaction_weight = 0.5 + 0.5 * batch_time.mean()
+
+            # 综合
+            time_weight = epoch_weight * interaction_weight
+
             users = batch['users']
             pos_items = batch['pos_items']
             # neg_items = batch['neg_items'][:, 0]  # 只取一个负样本
@@ -392,6 +428,18 @@ if __name__ == '__main__':
 
             struct_kd = F.mse_loss(sim_s_ui, sim_t_ui)
 
+            # ===================== 异构蒸馏 =====================
+            s_users_hetero = hetero_adapter(s_users_emb[users])
+            s_items_hetero = hetero_adapter(s_items_emb[pos_items])
+
+            t_users_detach = t_users_emb[users].detach()
+            t_items_detach = t_items_emb[pos_items].detach()
+
+            hetero_kd = (
+                F.mse_loss(s_users_hetero, t_users_detach) +
+                F.mse_loss(s_items_hetero, t_items_detach)
+            ) / 2
+
             # ===================== 对抗学习 =====================
 
             # Student embedding（投影到Teacher维度）
@@ -430,21 +478,53 @@ if __name__ == '__main__':
             kd_weight = 0.3 * (1 / (1 + math.exp(-(epoch - 0.3 * args.epoch) / 10)))
 
             # ===================== 自适应权重 =====================
-            w_score, w_rep, w_struct, w_adv = adaptive_weights(score_kd, rep_kd, struct_kd, adv_loss)
+            #w_score, w_rep, w_struct, w_adv = adaptive_weights(score_kd, rep_kd, struct_kd, adv_loss)
+            if args.use_adaptive:
+                w_score, w_rep, w_struct, w_adv = adaptive_weights(
+                    score_kd, rep_kd, struct_kd, adv_loss
+                )
+            else:
+                w_score, w_rep, w_struct, w_adv = 1, 1, 1, 1
 
             #打印便于调试
             #logger.info("Adaptive Weights: score=%.4f rep=%.4f struct=%.4f adv=%.4f"
             #            % (w_score, w_rep, w_struct, w_adv))
 
             # ===================== 总 Loss =====================
+            '''
             batch_loss = time_weight * bpr_loss \
                          + time_weight * kd_weight * (
                                  w_score * score_kd +
                                  w_rep * rep_kd +
                                  w_struct * struct_kd
                          ) \
-                         + w_adv * adv_loss
+                         + w_adv * adv_loss \
+                         + 0.1 * hetero_kd
+            '''
+            if args.use_kd:
 
+                kd_total = 0
+
+                if args.use_score_kd:
+                    kd_total += w_score * score_kd
+
+                if args.use_rep_kd:
+                    kd_total += w_rep * rep_kd
+
+                if args.use_struct_kd:
+                    kd_total += w_struct * struct_kd
+
+                if args.use_adv:
+                    kd_total += w_adv * adv_loss
+
+                if args.use_hetero_kd:
+                    kd_total += 0.1 * hetero_kd
+
+                if args.use_dynamic:
+                    kd_total = time_weight * kd_weight * kd_total
+
+                # 最终loss
+                batch_loss = bpr_loss + kd_total
             '''
             # 0.3 0.3 0.1->0.4 0.4 0.03->0.5 0.4 0.002
             batch_loss = time_weight * bpr_loss \
@@ -479,11 +559,12 @@ if __name__ == '__main__':
 
         if batch_count > 0:
             logger.info(
-                "KD avg: score=%.6f rep=%.6f struct=%.6f ADV loss: %.6f"
+                "KD avg: score=%.6f rep=%.6f struct=%.6f ADV=%.6f hetero=%.6f"
                 % (score_sum / batch_count,
                    rep_sum / batch_count,
                    struct_sum / batch_count,
-                   adv_loss.item())
+                   adv_loss.item(),
+                   hetero_kd.item())
             )
 
         if epoch % 5 == 0:
