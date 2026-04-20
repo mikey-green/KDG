@@ -194,7 +194,7 @@ if __name__ == '__main__':
     teacher_args.context_hops = 3
 
     if args.gnn == 'lightgcn':
-        from modules.LightGCN import LightGCN
+        from Modules.LightGCN import LightGCN
 
         teacher = LightGCN(n_params, teacher_args, norm_mat).to(device)
     else:
@@ -245,6 +245,8 @@ if __name__ == '__main__':
     ####################################################################################################
 
     cur_best_pre_0 = 0
+    best_ndcg = 0
+    best_epoch = 0
     stopping_step = 0
     should_stop = False
 
@@ -501,6 +503,7 @@ if __name__ == '__main__':
                          + w_adv * adv_loss \
                          + 0.1 * hetero_kd
             '''
+            batch_loss = bpr_loss
             if args.use_kd:
 
                 kd_total = 0
@@ -613,13 +616,22 @@ if __name__ == '__main__':
                 break
 
             """save weight"""
-            if valid_ret['recall'][0] == cur_best_pre_0:
+            if valid_ret['recall'][0] >= cur_best_pre_0:
+                cur_best_pre_0 = valid_ret['recall'][0]
+                best_ndcg = valid_ret['ndcg'][0]
+                best_epoch = epoch
+
                 save_path = get_save_path(args, model_type="student")
                 torch.save(student.state_dict(), save_path)
-                logger.info(f"Best Student saved to {save_path}")
+
+                logger.info(f"Best Student saved at epoch {epoch}")
         else:
             logger.info(
                 'using time %.4fs, training loss at epoch %d: %.4f'
                 % (train_e_t - train_s_t, epoch, loss.item())
             )
-    logger.info('early stopping at %d, recall@20:%.4f' % (epoch, cur_best_pre_0))
+    #logger.info('early stopping at %d, recall@20:%.4f' % (epoch, cur_best_pre_0))
+    logger.info(
+        'early stopping at %d | best epoch: %d | recall@20: %.4f | ndcg@20: %.4f'
+        % (epoch, best_epoch, cur_best_pre_0, best_ndcg)
+    )
