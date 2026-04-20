@@ -12,7 +12,7 @@ def parse_args():
     )
 
     # ===== train ===== # 
-    parser.add_argument("--gnn", nargs="?", default="lightgcn",
+    parser.add_argument("--gnn", nargs="?", default="ngcf",
                         help="Choose a recommender:[lightgcn, ngcf]")
     parser.add_argument('--epoch', type=int, default=500, help='number of epochs')
     parser.add_argument('--batch_size', type=int, default=1024, help='batch size')
@@ -41,6 +41,15 @@ def parse_args():
                         help='Specify the test type from {part, full}, indicating whether the reference is done in mini-batch')
 
     parser.add_argument("--context_hops", type=int, default=3, help="hop")
+
+    parser.add_argument('--use_kd', type=int, default=1)
+    parser.add_argument('--use_score_kd', type=int, default=1)
+    parser.add_argument('--use_rep_kd', type=int, default=1)
+    parser.add_argument('--use_struct_kd', type=int, default=1)
+    parser.add_argument('--use_hetero_kd', type=int, default=1)
+    parser.add_argument('--use_adv', type=int, default=1)
+    parser.add_argument('--use_dynamic', type=int, default=1)
+    parser.add_argument('--use_adaptive', type=int, default=1)
 
     # ===== save model ===== #
     parser.add_argument("--save", type=bool, default=False, help="save model or not")
